@@ -80,8 +80,9 @@ produces and consumes it.
 | `3` | Background | `(255, 255, 255)` white |
 
 The *iwan* — a vaulted hall walled on three sides and open to a courtyard on the
-fourth — is treated as a class of its own rather than folded into "room", because it
-is the organising element of the plan types this dataset covers.
+fourth — is treated as a class of its own rather than folded into "room". The
+annotation palette in `dataset/labelme.ipynb` keeps the same distinction, labelling
+`banyo`, `room` and `eyvan` separately.
 
 ### Annotation pipeline
 
@@ -105,8 +106,8 @@ mask[(mask_original >= 231.0)]                            = 3.0  # Background
 
 Note that the networks emit a **single continuous channel** (`out_channels=1`) that is
 regressed towards these class indices and rounded at inference, rather than the more
-usual 4-channel softmax. This keeps the output head small, which matters at this
-dataset size.
+usual 4-channel softmax over one-hot targets. The loss is correspondingly a per-pixel
+MSE rather than a cross-entropy.
 
 ### Augmentation
 
@@ -117,7 +118,7 @@ safe here because a floor plan has no canonical orientation.
 
 ## Model Architectures
 
-All four architectures share the U-Net skeleton — a contracting encoder, an expanding
+All five architectures share the U-Net skeleton — a contracting encoder, an expanding
 decoder built from `ConvTranspose2d` upsampling, skip connections concatenated across
 the bottleneck, and a 1 × 1 output convolution — but differ in how the encoder blocks
 are built.
@@ -237,19 +238,22 @@ Reading the table:
   while U-Net and ResUNet-18 sit around 89 % — roughly a five-point gap. The deeper
   stack of 3 × 3 convolutions per resolution level appears to suit thin-line plan
   imagery better than residual blocks do.
-- **Neither transfer strategy dominates globally.** Weight copy wins on U-Net
-  (+1.28) and VGGUNet-16 (+0.34); distillation wins on ResUNet-18 (+0.37) and
-  VGGUNet-19 (+0.49). The effect of the transfer mechanism is an order of magnitude
+- **Neither transfer strategy dominates globally.** In mIoU, weight copy wins on
+  U-Net (+1.28) and VGGUNet-16 (+0.34); distillation wins on ResUNet-18 (+0.37) and
+  VGGUNet-19 (+0.49). The effect of the transfer strategy is an order of magnitude
   smaller than the effect of the encoder choice.
-- **Distillation converges earlier** in three of the four pairs (129 vs 141, 140 vs
-  146, 100 vs 110), suggesting the teacher signal mostly accelerates convergence
-  rather than raising the ceiling.
+- **Distillation reaches its best checkpoint earlier** in three of the four pairs
+  (129 vs 141, 140 vs 146, 100 vs 110) — worth noting because the distilled student
+  starts from random initialisation, while its weight-copy counterpart starts from
+  the teacher's parameters.
 - **The best configuration overall is VGGUNet-19 with knowledge distillation**:
   95.23 % mIoU and 99.18 % pixel accuracy, reached by epoch 100.
 
 These figures come from the stored outputs of the training notebooks in this
 repository and refer to a single run per configuration at seed 9999; they are not
-averaged over seeds.
+averaged over seeds. As noted above, the two strategies differ in initialisation as
+well as in loss, so a Model-1/Model-2 gap should not be read as isolating the effect
+of distillation alone.
 
 ## Repository Structure
 
