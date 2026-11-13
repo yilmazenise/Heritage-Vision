@@ -387,4 +387,4 @@ We are grateful to our mentors for their guidance throughout the project.
 
 Released under the MIT License. See [LICENSE](LICENSE) for the full text.
 
-Copyright (c) 2024 Ahmet Kemal Cabbar
+Copyright (c) 2024 Ahmet Kemal Cabbar, Enise Nur Yılmaz
