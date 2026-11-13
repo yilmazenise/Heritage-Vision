@@ -3,7 +3,7 @@
 Semantic segmentation of historical architectural floor plans using U-Net family
 architectures, transfer learning and knowledge distillation.
 
-Heritage-Vision takes a scanned or digitised plan drawing of a historical building
+Heritage-Vision takes a digitised plan drawing of a historical building
 and labels every pixel as **wall**, **iwan**, **room** or **background**. The goal is
 to turn heritage plan archives — which exist mostly as raster drawings — into
 machine-readable spatial data that can support architectural analysis, typological
@@ -45,8 +45,8 @@ with skip connections is designed for.
 The pipeline is:
 
 1. **Annotation** — plans are labelled in LabelMe and exported as JSON.
-2. **Rasterisation** — JSON polygons are converted into paired `*Plan.jpg` /
-   `*Seg.jpg` images.
+2. **Rasterisation** — JSON polygons are drawn into colour masks and written out as
+   image files.
 3. **Class mapping** — greyscale mask intensities are collapsed into four integer
    class labels.
 4. **Pre-training** — a `convnext_base`-backed U-Net is pre-trained as the knowledge
@@ -80,22 +80,30 @@ produces and consumes it.
 | `3` | Background | `(255, 255, 255)` white |
 
 The *iwan* — a vaulted hall walled on three sides and open to a courtyard on the
-fourth — is treated as a class of its own rather than folded into "room". The
-annotation palette in `dataset/labelme.ipynb` keeps the same distinction, labelling
-`banyo`, `room` and `eyvan` separately.
+fourth — is treated as a class of its own rather than folded into "room".
 
 ### Annotation pipeline
 
-`dataset/labelme.ipynb` reads LabelMe JSON exports, decodes the embedded base64
-images, and rasterises the polygon annotations into colour masks using an intermediate
-class palette (`banyo`, `room`, `eyvan`). `dataset/split_test_train.ipynb` then pairs
-each plan with its mask and performs a random 80/20 split (`random_state=42`) into
-`images/train` and `images/test`. The split is not stratified by class.
+`dataset/labelme.ipynb` reads LabelMe JSON exports from a `labelform/` folder,
+decodes the embedded base64 image of each one, and draws the `rectangle` and `polygon`
+annotations over it with OpenCV using the palette `banyo` → red, `room` → green,
+`eyvan` → blue. For every JSON file it writes two images into `Data/`: `<name>_plan.jpg`
+(the plan) and `<name>_mask.jpg` (the annotated version).
+
+`dataset/split_test_train.ipynb` works on a different folder and a different naming
+convention: it reads `Data/digital`, pairs every `*_Plan.jpg` with its `*_Seg.jpg`,
+and performs a random 80/20 split (`random_state=42`, not stratified) into
+`images/train` and `images/test`.
+
+The two notebooks therefore do not chain directly — the colour masks produced by the
+first are not yet the greyscale `*Seg.jpg` files the second and the data loader
+expect, and the capitalisation differs. Converting and organising `Data/` into
+`Data/digital` is a manual step that is not scripted in this repository.
 
 At load time, `dataset/dataset.py` discovers samples by filename convention — every
 file ending in `Plan.jpg` is an input, and its target is the same name with
-`Plan.jpg` replaced by `Seg.jpg`. Mask intensities are then binned into the four
-class indices:
+`Plan.jpg` replaced by `Seg.jpg`. The mask is read as greyscale and its intensities
+are binned into the four class indices:
 
 ```python
 mask[(mask_original <= 25.0)]                             = 0.0  # Walls
@@ -319,8 +327,11 @@ automatically via `device = 'cuda' if torch.cuda.is_available() else 'cpu'`.
 
 ### 1. Prepare the data
 
-Place LabelMe JSON exports in `labelform/`, then run `dataset/labelme.ipynb` to
-rasterise them and `dataset/split_test_train.ipynb` to split them. The result is:
+Place LabelMe JSON exports in `labelform/` and run `dataset/labelme.ipynb` to decode
+and annotate them into `Data/`. Convert those colour masks to the greyscale `*Seg.jpg`
+form and collect the pairs under `Data/digital` as `*_Plan.jpg` / `*_Seg.jpg` — this
+step is manual, see [Annotation pipeline](#annotation-pipeline). Then run
+`dataset/split_test_train.ipynb`, which produces:
 
 ```
 images/
