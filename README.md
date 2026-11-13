@@ -371,16 +371,15 @@ Every `*Plan.jpg` in `input_folder` is written out as a colourised
 
 **Under the mentorship of**
 
-- **Sabri Gökmen**
-- **Taner Arsan**
-- **Figen Özen**
+- **Sabri Gökmen** — University of North Carolina at Charlotte
+- **Taner Arsan** — Kadir Has University
+- **Figen Özen** — Yıldız Technical University
 
-This project was carried out under their joint supervision, bringing together
-architectural and heritage-documentation expertise on the one hand and computer
-engineering and signal-processing expertise on the other. That pairing shapes the
-work directly: the class taxonomy and the decision to treat the iwan as a first-class
-category come from the architectural side, while the transfer-learning design that
-makes a 131-plan dataset trainable comes from the engineering side.
+This project was carried out under their joint supervision, across three
+institutions and across disciplines. That breadth shapes the work directly: the class
+taxonomy, and in particular the decision to treat the iwan as a category of its own
+rather than a kind of room, is an architectural judgement, while the transfer-learning
+design that makes a 131-plan dataset trainable at all is an engineering one.
 
 We are grateful to our mentors for their guidance throughout the project.
 
