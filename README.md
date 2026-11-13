@@ -88,8 +88,8 @@ is the organising element of the plan types this dataset covers.
 `dataset/labelme.ipynb` reads LabelMe JSON exports, decodes the embedded base64
 images, and rasterises the polygon annotations into colour masks using an intermediate
 class palette (`banyo`, `room`, `eyvan`). `dataset/split_test_train.ipynb` then pairs
-each plan with its mask and performs a stratified 80/20 split into `images/train` and
-`images/test`.
+each plan with its mask and performs a random 80/20 split (`random_state=42`) into
+`images/train` and `images/test`. The split is not stratified by class.
 
 At load time, `dataset/dataset.py` discovers samples by filename convention — every
 file ending in `Plan.jpg` is an input, and its target is the same name with
@@ -149,8 +149,8 @@ The pre-trained source is a U-Net with a `convnext_base` backbone
 `pretraining/pretrain.ipynb` at a learning rate of 1e-3 and stored under
 `checkpoints/pretrained/`.
 
-Each architecture is then trained twice, from the same starting point, under two
-strategies:
+Each architecture is then trained twice, under two strategies that differ both in
+initialisation and in loss:
 
 **Model-1 — Weight Copy.** Parameters whose names match between the pre-trained
 network and the target architecture are copied directly; the rest are randomly
@@ -162,19 +162,24 @@ for k, v in pretrained_dict.items():
         new_state_dict1[k] = v
 ```
 
-**Model-2 — Knowledge Distillation.** The pre-trained network is frozen and used as a
-teacher. The student is trained on the sum of the segmentation loss against ground
-truth and a distillation loss against the teacher's predictions, both computed as
-per-pixel MSE:
+**Model-2 — Knowledge Distillation.** The student starts from random initialisation —
+it receives no copied weights. The pre-trained network is frozen and used as a teacher,
+and the student is trained on the segmentation loss against ground truth plus a
+distillation loss against the teacher's predictions, both per-pixel MSE, with the
+distillation term down-weighted by `alpha = 0.01`:
 
 ```python
 criterion = nn.MSELoss(reduction='none')
-# segmentation loss:  criterion(pred_student, mask).mean()
-# distillation loss:  criterion(pred_student, teacher_model(img_input)).mean()
+
+segmentation_loss = criterion(pred_student, mask).mean()
+distillation_loss = criterion(pred_student, teacher_model(img_input)).mean()
+total_loss        = segmentation_loss + alpha * distillation_loss   # alpha = 0.01
 ```
 
-Running both for every architecture is what makes the results table below a controlled
-comparison: same data, same schedule, same seed — only the transfer mechanism differs.
+So the two strategies are not a like-for-like swap of one mechanism: Model-1 inherits
+the teacher's weights and never sees it again, while Model-2 starts from scratch and
+only ever sees the teacher through its outputs. Data, schedule and seed are identical
+across the pair; initialisation and loss are not.
 
 ## Training Setup
 
@@ -182,17 +187,22 @@ comparison: same data, same schedule, same seed — only the transfer mechanism 
 |---|---|
 | Optimiser | Adam, β = (0.9, 0.999) |
 | Learning rate | 1e-4 (1e-3 for pre-training) |
-| Weight decay | 1e-4 |
-| Scheduler | `ReduceLROnPlateau`, mode `min`, patience 20, factor 0.1 |
-| Loss | Per-pixel MSE (+ distillation term for Model-2) |
+| Scheduler | `ReduceLROnPlateau`, mode `min`, factor 0.1, patience 20 (40 for VGGUNet-19) |
+| Loss | Per-pixel MSE (+ `0.01 ×` distillation term for Model-2) |
 | Epochs | 150 |
 | Batch size | 8 |
 | Gradient clipping | 1.0 |
 | Seed | 9999 |
-| Input size | 512 × 512 |
+| Input size | 512 × 512 (set by the resize transform) |
 
 `seed_everything()` fixes Python, NumPy and CUDA seeds and sets
 `cudnn.deterministic = True`, so runs are reproducible.
+
+Two entries in the hyperparameter dictionary are worth flagging, because they do not
+reach the training loop: `weight_decay` (1e-4) is defined but never passed to the Adam
+constructor, so the models train without it; and the `height`/`width` entries (320)
+are used only to build the dummy input for the shape check — the actual input size is
+fixed at 512 × 512 by the Albumentations resize.
 
 Checkpoints are written by `utils/save_load_utils.py` and carry the full
 hyperparameter dictionary, optimiser state, best-model flag, last epoch and timestamp
@@ -317,8 +327,14 @@ images/
 ### 2. Pre-train the teacher
 
 ```bash
-python pretraining/pretraining.py
+python -m pretraining.pretraining
 ```
+
+Run it from the repository root, and as a module: the script imports `dataset.*` and
+`utils.*` as top-level packages and resolves `./images/train` relative to the working
+directory, so `python pretraining/pretraining.py` will not find them. The script has
+no `__main__` guard — importing it starts training. `pretraining/pretrain.ipynb` is
+the same procedure as a notebook.
 
 This writes `checkpoints/pretrained/pretrained_best.pth.tar`, the weight source and
 teacher for every downstream run.
